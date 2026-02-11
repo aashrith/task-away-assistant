@@ -12,9 +12,11 @@ AI-powered chat-based task manager built on TanStack Start.
 
 ## Development
 
+**Node:** v25.2.1
+
 ```bash
 npm install
-cp .env.example .env
+cp .env.example .env.local
 npm run dev
 ```
 

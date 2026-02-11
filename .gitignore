@@ -4,7 +4,12 @@ dist
 dist-ssr
 *.local
 count.txt
+
+# Secrets and environment (never commit)
 .env
+.env.*
+!.env.example
+
 .nitro
 .tanstack
 .wrangler
