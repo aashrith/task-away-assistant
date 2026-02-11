@@ -7,6 +7,9 @@ import { fileURLToPath, URL } from 'url'
 import { nitro } from 'nitro/vite'
 
 const config = defineConfig({
+  nitro: {
+    serverDir: 'server',
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

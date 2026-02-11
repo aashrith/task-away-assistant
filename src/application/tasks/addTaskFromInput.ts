@@ -1,15 +1,8 @@
 import type { Task, TaskPriority } from '../../domain/task/Task'
 import type { TaskRepository } from '../../domain/task/TaskRepository'
+import type { AddTaskCommand } from '../../domain/task/task-commands'
 
-export interface AddTaskCommand {
-  title: string
-  description?: string
-  priority?: TaskPriority
-  /**
-   * Optional due date as ISO-8601 string.
-   */
-  dueDate?: string
-}
+export type { AddTaskCommand } from '../../domain/task/task-commands'
 
 export class TaskService {
   constructor(private readonly repository: TaskRepository) {}
