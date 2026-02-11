@@ -1,4 +1,114 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
+
+/**
+ * Simple markdown renderer for chat messages.
+ * Handles: bold (**text**), italic (*text*), code (`code`), and line breaks.
+ */
+function renderMarkdown(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = []
+  let key = 0
+
+  // Split by lines first to handle line breaks
+  const lines = text.split('\n')
+
+  lines.forEach((line, lineIndex) => {
+    if (lineIndex > 0) {
+      parts.push(<br key={`br-${key++}`} />)
+    }
+
+    if (!line.trim()) {
+      return
+    }
+
+    // Process inline markdown: **bold**, *italic*, `code`
+    const tokens: React.ReactNode[] = []
+    let pos = 0
+
+    while (pos < line.length) {
+      // Check for bold **text** (must check before italic)
+      const boldMatch = line.slice(pos).match(/^\*\*([^*]+)\*\*/)
+      if (boldMatch) {
+        tokens.push(
+          <strong key={key++}>
+            {boldMatch[1]}
+          </strong>
+        )
+        pos += boldMatch[0].length
+        continue
+      }
+
+      // Check for code `text` (before italic to avoid conflicts)
+      const codeMatch = line.slice(pos).match(/^`([^`]+)`/)
+      if (codeMatch) {
+        tokens.push(
+          <code key={key++} className="chat-markdown-code">
+            {codeMatch[1]}
+          </code>
+        )
+        pos += codeMatch[0].length
+        continue
+      }
+
+      // Check for italic *text* (single asterisk, not double)
+      const italicMatch = line.slice(pos).match(/^\*([^*`\n]+)\*/)
+      if (italicMatch && line[pos + italicMatch[0].length] !== '*') {
+        tokens.push(
+          <em key={key++}>
+            {italicMatch[1]}
+          </em>
+        )
+        pos += italicMatch[0].length
+        continue
+      }
+
+      // Regular text - find the next markdown token
+      let nextPos = line.length
+      const nextBold = line.indexOf('**', pos)
+      const nextCode = line.indexOf('`', pos)
+      const nextItalic = line.indexOf('*', pos)
+
+      if (nextBold !== -1 && nextBold < nextPos) nextPos = nextBold
+      if (nextCode !== -1 && nextCode < nextPos) nextPos = nextCode
+      if (nextItalic !== -1 && nextItalic < nextPos && line[nextItalic + 1] !== '*') {
+        nextPos = nextItalic
+      }
+
+      if (nextPos < line.length) {
+        tokens.push(
+          <span key={key++}>
+            {line.slice(pos, nextPos)}
+          </span>
+        )
+        pos = nextPos
+      } else {
+        tokens.push(
+          <span key={key++}>
+            {line.slice(pos)}
+          </span>
+        )
+        break
+      }
+    }
+
+    if (tokens.length > 0) {
+      parts.push(...tokens)
+    } else if (line.length > 0) {
+      parts.push(
+        <span key={key++}>
+          {line}
+        </span>
+      )
+    }
+  })
+
+  return parts.length > 0
+    ? parts
+    : [
+        <span key={0}>
+          {text}
+        </span>,
+      ]
+}
 
 type ChatMessage = {
   role: 'assistant' | 'user'
@@ -12,6 +122,8 @@ type ChatPanelProps = {
 }
 
 const DEBOUNCE_DELAY_MS = 500 // Minimum time between submissions
+const SCROLL_TO_BOTTOM_DELAY_MS = 100
+const ENTER_KEY_CODE = 13
 
 export function ChatPanel({
   messages,
@@ -21,6 +133,7 @@ export function ChatPanel({
   const [input, setInput] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const lastSubmitTimeRef = useRef<number>(0)
+  const chatHistoryRef = useRef<HTMLDivElement>(null)
 
   const handleSubmit = useCallback(async (event: React.FormEvent) => {
     event.preventDefault()
@@ -55,6 +168,21 @@ export function ChatPanel({
     event.target.removeAttribute('readonly')
   }
 
+  // Auto-scroll to bottom when new messages are added or when thinking
+  useEffect(() => {
+    if (chatHistoryRef.current) {
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        if (chatHistoryRef.current) {
+          chatHistoryRef.current.scrollTo({
+            top: chatHistoryRef.current.scrollHeight,
+            behavior: 'smooth',
+          })
+        }
+      }, SCROLL_TO_BOTTOM_DELAY_MS)
+    }
+  }, [messages.length, isThinking])
+
   return (
     <section
       aria-label="Chat control interface"
@@ -62,7 +190,7 @@ export function ChatPanel({
     >
       <header className="panel-header">Chat</header>
       <div className="chat-body">
-        <div className="chat-history" aria-live="polite">
+        <div ref={chatHistoryRef} className="chat-history" aria-live="polite">
           {messages.map((message, index) => {
             const isAssistant = message.role === 'assistant'
             const alignmentClass = isAssistant
@@ -78,7 +206,7 @@ export function ChatPanel({
                 <div className={bubbleClass}>
                   <span className="chat-bubble__label">{label}</span>
                   <span className="chat-bubble__content">
-                    {message.content.split('\n').map((line, i) =>
+                    {isAssistant ? renderMarkdown(message.content) : message.content.split('\n').map((line, i) =>
                       i === 0 ? (
                         line
                       ) : (
@@ -154,7 +282,7 @@ export function ChatPanel({
             }}
             onKeyDown={(e) => {
               // Prevent Enter key from submitting if already submitting
-              if ((e.key === 'Enter' || e.keyCode === 13) && (isSubmitting || isThinking)) {
+              if ((e.key === 'Enter' || e.keyCode === ENTER_KEY_CODE) && (isSubmitting || isThinking)) {
                 e.preventDefault()
                 e.stopPropagation()
               }

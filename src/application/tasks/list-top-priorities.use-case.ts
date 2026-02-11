@@ -3,7 +3,8 @@ import type { TaskRepository } from '../../domain/task/task-repository'
 import type { ListTopPrioritiesQuery } from '../../domain/task/task-commands'
 
 const DEFAULT_LIMIT = 3
-const DEFAULT_TIMEFRAME = 'today'
+const MAX_TOP_PRIORITIES = 100
+const DEFAULT_TIMEFRAME = '' // Empty string means no timeframe filter - show all priorities
 
 /**
  * Use case: List top priority tasks for a given timeframe.
@@ -19,17 +20,19 @@ export class ListTopPrioritiesUseCase {
       limit = DEFAULT_LIMIT
     }
     // Cap at reasonable maximum
-    if (limit > 100) {
-      limit = 100
+    if (limit > MAX_TOP_PRIORITIES) {
+      limit = MAX_TOP_PRIORITIES
     }
 
     const timeframe = query.timeframe ?? DEFAULT_TIMEFRAME
 
     const allTasks = await this.repository.list()
 
-    // Filter by timeframe
+    // Filter by timeframe (if specified)
     const now = new Date()
-    const filteredTasks = this.filterByTimeframe(allTasks, timeframe, now)
+    const filteredTasks = timeframe 
+      ? this.filterByTimeframe(allTasks, timeframe, now)
+      : allTasks // If no timeframe, return all tasks
 
     // Filter out completed tasks
     const activeTasks = filteredTasks.filter((task) => task.status !== 'completed')

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useLoaderData, useRouter } from '@tanstack/react-router'
+import { useChat } from '@ai-sdk/react'
 import { TasksPanel } from '../tasks/TasksPanel'
 import { ChatPanel } from '../chat/ChatPanel'
 import type { Task } from '../../domain/task/task'
@@ -10,6 +11,7 @@ type ChatMessage = {
 }
 
 const STORAGE_KEY = 'taskflow-chat-messages'
+const TASK_REFRESH_DELAY_MS = 300
 const DEFAULT_WELCOME_MESSAGE: ChatMessage = {
   role: 'assistant',
   content: 'Welcome. You can add, update or review tasks.',
@@ -49,21 +51,41 @@ export function AppShell(): React.JSX.Element {
   const loaderData = useLoaderData({ from: '/' })
   const [tasks, setTasks] = useState<Task[]>(loaderData?.tasks ?? [])
   const [taskFilter, setTaskFilter] = useState<'all' | 'overdue' | 'high'>('all')
-  
-  // Initialize messages from localStorage or use default welcome message
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
-    const saved = loadMessagesFromStorage()
-    return saved.length > 0 ? saved : [DEFAULT_WELCOME_MESSAGE]
+  // Use AI SDK's useChat hook for streaming support
+  // Defaults to /api/chat endpoint
+  const { messages, sendMessage, status } = useChat({
+    onFinish: async () => {
+      // Refresh tasks after chat completes
+      router.invalidate()
+      await refreshTasks()
+      setTimeout(async () => {
+        await refreshTasks()
+      }, TASK_REFRESH_DELAY_MS)
+    },
   })
-  
-  const [isThinking, setIsThinking] = useState(false)
+
+  // Convert UIMessage[] to ChatMessage[] for localStorage and ChatPanel
+  const chatMessages = React.useMemo(() => {
+    return messages.map((msg) => {
+      // Extract text content from UIMessage parts
+      const textParts = msg.parts
+        .filter((part) => part.type === 'text')
+        .map((part) => (part as { text: string }).text)
+        .join('')
+      
+      return {
+        role: msg.role === 'system' ? 'assistant' : msg.role,
+        content: textParts || '',
+      } as ChatMessage
+    })
+  }, [messages])
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
-    if (messages.length > 0) {
-      saveMessagesToStorage(messages)
+    if (chatMessages.length > 0) {
+      saveMessagesToStorage(chatMessages)
     }
-  }, [messages])
+  }, [chatMessages])
 
   // Refresh tasks function - fetches from API and updates state
   const refreshTasks = useCallback(async () => {
@@ -140,49 +162,12 @@ export function AppShell(): React.JSX.Element {
     const trimmed = content.trim()
     if (!trimmed) return
 
-    const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: trimmed }]
-    setMessages(nextMessages)
-
-    try {
-      setIsThinking(true)
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: nextMessages }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`)
-      }
-
-      const data: { type: string; message: string } = await response.json()
-      setMessages((current) => [...current, { role: 'assistant', content: data.message }])
-      
-      // Invalidate router first to trigger loader refresh
-      router.invalidate()
-      
-      // Refresh tasks immediately and then again after a short delay to ensure we catch updates
-      // This handles cases where the server needs a moment to persist changes
-      await refreshTasks()
-      
-      // Also refresh after a brief delay to catch any delayed server updates
-      setTimeout(async () => {
-        await refreshTasks()
-      }, 300)
-    } catch (error) {
-      const fallback =
-        error instanceof Error ? error.message : 'Unexpected error talking to assistant.'
-      setMessages((current) => [
-        ...current,
-        {
-          role: 'assistant',
-          content: `Sorry, I ran into a problem: ${fallback}`,
-        },
-      ])
-    } finally {
-      setIsThinking(false)
-    }
+    // Use useChat's sendMessage method which handles streaming automatically
+    await sendMessage({ text: trimmed })
   }
+
+  // Derive isThinking from status
+  const isThinking = status === 'submitted' || status === 'streaming'
 
   return (
     <div className="app-root">
@@ -200,7 +185,7 @@ export function AppShell(): React.JSX.Element {
             activeFilter={taskFilter}
             onFilterChange={setTaskFilter}
           />
-          <ChatPanel messages={messages} onSend={handleSend} isThinking={isThinking} />
+          <ChatPanel messages={chatMessages} onSend={handleSend} isThinking={isThinking} />
         </main>
       </div>
     </div>

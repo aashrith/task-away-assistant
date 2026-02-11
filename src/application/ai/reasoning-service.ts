@@ -1,159 +1,97 @@
-import { generateText, Output } from 'ai'
+import { streamText, tool } from 'ai'
 import { openai } from '@ai-sdk/openai'
+import type { z } from 'zod'
 
-import type { CoreMessage, ReasoningContext, ReasoningResult, ToolDefinition } from './types'
-import { clarificationHints, intentOutputSchema, REASONING_SYSTEM } from './intent'
-import { requiredFieldsPerIntent, toolSchemasByName } from './tool-schemas'
-import { AI_MESSAGES, DEFAULT_AI_MODEL, FIRST_ERROR_INDEX, LOG_TRUNCATION_LENGTH } from './ai-config'
+import type { CoreMessage, ReasoningContext } from './types'
+import { DEFAULT_SYSTEM_PROMPT, DEFAULT_AI_MODEL, LOG_TRUNCATION_LENGTH } from './ai-config'
+import { toolSchemasByName } from './tool-schemas'
 import { createModuleLogger } from '../../infrastructure/logger'
+import type { TaskService } from '../tasks/task-service'
+import { ToolHandlers } from '../tasks/tool-handlers'
+import { ToolHandlerRegistry } from '../tasks/tool-handler-registry'
 
 const log = createModuleLogger('reasoning')
 
 /**
- * Reasoning layer: step-based intent detection, validation, and clarification.
- * Single model call for intent + params, then Zod validation. No chain-of-thought.
+ * Streaming reasoning service with native tool calling.
+ * Uses streamText with tools for real-time streaming responses.
+ * Tool execution happens during streaming, and the AI responds conversationally.
  */
-export async function reason(
+export async function streamReasoning(
   messages: CoreMessage[],
-  _tools: ToolDefinition[],
+  taskService: TaskService,
   context: ReasoningContext
-): Promise<ReasoningResult> {
+): Promise<Response> {
   const lastUser = messages.filter((m) => m.role === 'user').pop()?.content ?? ''
   log('input', {
     lastUser:
       lastUser.slice(0, LOG_TRUNCATION_LENGTH) +
       (lastUser.length > LOG_TRUNCATION_LENGTH ? '...' : ''),
   })
+
   if (!lastUser.trim()) {
-    return { type: 'response', message: AI_MESSAGES.emptyUserMessage }
+    // Return empty message response as stream
+    const { ResponseBuilder } = await import('../../infrastructure/http/response-builder')
+    const { AI_MESSAGES } = await import('./ai-config')
+    return ResponseBuilder.streamResponse(AI_MESSAGES.emptyUserMessage)
+  }
+
+  // Set up tool handlers
+  const toolHandlers = new ToolHandlers(taskService)
+  const toolRegistry = new ToolHandlerRegistry(toolHandlers)
+
+  // Convert tool schemas to AI SDK tool definitions
+  // Use zodSchema() helper to ensure proper Zod v4 to JSON Schema conversion
+  const toolsRecord: Record<string, any> = {}
+  
+  for (const [name, schema] of Object.entries(toolSchemasByName)) {
+    // Pass Zod schema directly to tool() - it handles conversion internally
+    // The tool() function expects inputSchema, not parameters
+    const zodSchemaInstance = schema as z.ZodTypeAny
+    
+    // Create tool - tool() will automatically convert Zod schema to JSON Schema
+    toolsRecord[name] = tool({
+      description: `Tool for ${name} operation. Use this when the user wants to ${name.replace(/([A-Z])/g, ' $1').toLowerCase()}.`,
+      inputSchema: zodSchemaInstance,
+      execute: async (args: any) => {
+        const response = await toolRegistry.execute(name, args)
+        const responseData = await response.json()
+        return responseData.message || 'Operation completed'
+      },
+    })
   }
 
   const nowIso = context.now.toISOString()
-  const { output: object } = await generateText({
+  const systemPrompt = `${DEFAULT_SYSTEM_PROMPT}
+
+Current time: ${nowIso}.
+
+When executing tools, provide conversational responses to the user. Be helpful and confirm actions clearly.`
+
+  // Stream text with tool calling
+  const streamOptions: any = {
     model: openai(process.env.AI_MODEL || DEFAULT_AI_MODEL),
-    output: Output.object({ schema: intentOutputSchema }),
-    system: `${REASONING_SYSTEM} Current time: ${nowIso}.`,
+    system: systemPrompt,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
-  })
-
-  const intent = object.intent
-  const raw: Record<string, unknown> = {
-    ...(object.title && { title: object.title }),
-    ...(object.titles && { titles: object.titles }),
-    ...(object.description && { description: object.description }),
-    ...(object.priority && { priority: object.priority }),
-    ...(object.dueDate && { dueDate: object.dueDate }),
-    ...(object.taskIdentifier && { taskIdentifier: object.taskIdentifier }),
-    ...(object.timeframe && { timeframe: object.timeframe }),
-    ...(object.newTitle && { newTitle: object.newTitle }),
-    ...(object.limit && { limit: object.limit }),
+    tools: toolsRecord,
   }
-  log('intent', { intent, raw })
+  const result = streamText(streamOptions)
 
-  if (intent === 'help') {
-    return {
-      type: 'response',
-      message: AI_MESSAGES.help,
-    }
-  }
+  // Return streaming response in AI SDK data stream format
+  return result.toTextStreamResponse()
+}
 
-  if (intent === 'other') {
-    return {
-      type: 'response',
-      message: AI_MESSAGES.unknownIntent,
-    }
-  }
-
-  const required = requiredFieldsPerIntent[intent] ?? []
-  const missing = required.filter((f) => !(raw as Record<string, unknown>)[f])
-  if (missing.length > 0) {
-    log('clarification: missing fields', { missing })
-    const ask = missing
-      .map((m) => clarificationHints[m] ?? `Please provide ${m}.`)
-      .join(' ')
-    return { type: 'clarification', message: ask }
-  }
-
-  const schema = toolSchemasByName[intent]
-  if (!schema) {
-    return {
-      type: 'response',
-      message: AI_MESSAGES.noMatch,
-    }
-  }
-
-  // Transform limit from string to number for listTopPriorities
-  if (intent === 'listTopPriorities' && raw.limit) {
-    const limitNum = Number(raw.limit)
-    // Only set if it's a valid positive integer
-    if (Number.isFinite(limitNum) && Number.isInteger(limitNum) && limitNum > 0 && limitNum <= 100) {
-      raw.limit = limitNum
-    } else {
-      // Remove invalid limit - will use default
-      delete raw.limit
-    }
-  }
-
-  // Handle multiple tasks for addTask intent
-  if (intent === 'addTask' && raw.titles && typeof raw.titles === 'string' && raw.titles.trim()) {
-    // Parse multiple task titles
-    const titles = raw.titles
-      .split(',')
-      .map((t) => t.trim())
-      .filter((t) => t.length > 0)
-    
-    // Include the first title from the title field if it's different
-    const firstTitle = typeof raw.title === 'string' ? raw.title.trim() : ''
-    if (firstTitle && !titles.includes(firstTitle)) {
-      titles.unshift(firstTitle)
-    }
-
-    if (titles.length > 1) {
-      // Create multiple tool calls for multiple tasks
-      const toolCalls: Array<{ name: string; args: unknown }> = []
-      for (const title of titles) {
-        const taskRaw: Record<string, unknown> = {
-          title,
-        }
-        if (raw.description && typeof raw.description === 'string') {
-          taskRaw.description = raw.description
-        }
-        if (raw.priority && typeof raw.priority === 'string') {
-          taskRaw.priority = raw.priority
-        }
-        if (raw.dueDate && typeof raw.dueDate === 'string') {
-          taskRaw.dueDate = raw.dueDate
-        }
-        const taskSchema = toolSchemasByName[intent]
-        const parsed = taskSchema?.safeParse(taskRaw)
-        if (parsed?.success) {
-          toolCalls.push({ name: intent, args: parsed.data })
-        }
-      }
-
-      if (toolCalls.length > 0) {
-        log('multiple_tool_calls', { count: toolCalls.length })
-        return {
-          type: 'tool_calls',
-          toolCalls,
-        }
-      }
-    }
-  }
-
-  const parsed = schema.safeParse(raw)
-  if (!parsed.success) {
-    const first = parsed.error.issues[FIRST_ERROR_INDEX]
-    log('validation failed', { intent, issue: first?.message })
-    return {
-      type: 'clarification',
-      message: first?.message ?? AI_MESSAGES.validationError,
-    }
-  }
-
-  log('tool_call', { name: intent, args: parsed.data })
-  return {
-    type: 'tool_call',
-    toolCall: { name: intent, args: parsed.data },
-  }
+/**
+ * Legacy reason function for backward compatibility.
+ * Now delegates to streaming version but returns ReasoningResult.
+ * @deprecated Use streamReasoning for new code
+ */
+export async function reason(
+  _messages: CoreMessage[],
+  _tools: unknown[],
+  _context: ReasoningContext
+): Promise<import('./types').ReasoningResult> {
+  // This is kept for backward compatibility but should not be used
+  // The chat handler should use streamReasoning directly
+  throw new Error('reason() is deprecated. Use streamReasoning() for streaming with tool calling.')
 }

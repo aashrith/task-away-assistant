@@ -24,4 +24,4 @@ export {
   type AddTaskInput,
 } from './tool-schemas'
 export { intentOutputSchema, REASONING_SYSTEM, clarificationHints } from './intent'
-export { reason } from './reasoning-service'
+export { reason, streamReasoning } from './reasoning-service'
