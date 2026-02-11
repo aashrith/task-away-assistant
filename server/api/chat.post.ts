@@ -1,8 +1,6 @@
 import { defineEventHandler, readBody } from 'h3'
 
-import { InMemoryTaskRepository } from '../../src/infrastructure/task/in-memory-task-repository'
 import { reason, type ChatError } from '../../src/application/ai'
-import { TaskService } from '../../src/application/tasks/task-service'
 import { AI_MESSAGES } from '../../src/application/ai/ai-config'
 import { HTTP_STATUS } from '../../src/infrastructure/http/http-constants'
 import { createModuleLogger } from '../../src/infrastructure/logger'
@@ -11,9 +9,8 @@ import { ResponseBuilder } from '../../src/infrastructure/http/response-builder'
 import { ToolHandlers } from '../../src/application/tasks/tool-handlers'
 import { ToolHandlerRegistry } from '../../src/application/tasks/tool-handler-registry'
 import { createError } from 'h3'
+import { taskService } from '../task-context'
 
-const taskRepo = new InMemoryTaskRepository()
-const taskService = new TaskService(taskRepo)
 const toolHandlers = new ToolHandlers(taskService)
 const toolRegistry = new ToolHandlerRegistry(toolHandlers)
 
@@ -38,6 +35,7 @@ export default defineEventHandler(async (event): Promise<Response | ChatError> =
     log('reason result', {
       type: result.type,
       ...(result.type === 'tool_call' && { tool: result.toolCall.name }),
+      ...(result.type === 'tool_calls' && { toolCount: result.toolCalls.length }),
     })
 
     // Handle clarification and direct responses
@@ -45,7 +43,37 @@ export default defineEventHandler(async (event): Promise<Response | ChatError> =
       return ResponseBuilder.success({ type: result.type, message: result.message })
     }
 
-    // Handle tool calls
+    // Handle multiple tool calls (e.g., multiple tasks)
+    if (result.type === 'tool_calls') {
+      // Extract task titles from args before execution
+      const taskTitles: string[] = []
+      for (const toolCall of result.toolCalls) {
+        if (toolCall.name === 'addTask' && typeof toolCall.args === 'object' && toolCall.args !== null) {
+          const args = toolCall.args as { title?: string }
+          if (args.title) {
+            taskTitles.push(args.title)
+          }
+        }
+      }
+      
+      // Execute all tool calls
+      await Promise.all(
+        result.toolCalls.map((toolCall) => toolRegistry.execute(toolCall.name, toolCall.args))
+      )
+      
+      // Return combined response
+      if (taskTitles.length > 0) {
+        const message = taskTitles.length === 1
+          ? `Task "${taskTitles[0]}" created successfully.`
+          : `✓ Created ${taskTitles.length} tasks:\n${taskTitles.map((title, i) => `  ${i + 1}. "${title}"`).join('\n')}`
+        return ResponseBuilder.response(message)
+      }
+      
+      // Fallback: execute first and return
+      return await toolRegistry.execute(result.toolCalls[0].name, result.toolCalls[0].args)
+    }
+
+    // Handle single tool call
     if (result.type === 'tool_call') {
       return await toolRegistry.execute(result.toolCall.name, result.toolCall.args)
     }

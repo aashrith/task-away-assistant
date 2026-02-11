@@ -21,14 +21,23 @@ export const intentOutputSchema = z.object({
       'listOverdueTasks',
       'renameTask',
       'listTopPriorities',
+      'deleteAllTasks',
+      'completeAllTasks',
+      'clearCompletedTasks',
+      'updateTask',
+      'updateAllTasksPriority',
+      'help',
       'other',
     ])
     .describe(
-      'The detected user intent: addTask, listTasks, markTaskDone, deleteTask, listOverdueTasks, renameTask, listTopPriorities, or other'
+      'The detected user intent: addTask, listTasks, markTaskDone, deleteTask, listOverdueTasks, renameTask, listTopPriorities, deleteAllTasks, completeAllTasks, clearCompletedTasks, updateTask, updateAllTasksPriority, help, or other'
     ),
   title: z
     .string()
-    .describe('Task title extracted from user message (empty string if not applicable or not provided)'),
+    .describe('Task title extracted from user message (empty string if not applicable or not provided). For multiple tasks, extract only the first one here.'),
+  titles: z
+    .string()
+    .describe('Comma-separated list of multiple task titles when user mentions multiple tasks in one message (e.g., "task1, task2, task3"). Empty string if only one task or not applicable.'),
   description: z
     .string()
     .describe('Task description extracted from user message (empty string if not provided)'),

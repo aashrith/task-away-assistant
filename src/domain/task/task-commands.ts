@@ -70,6 +70,35 @@ export const ListTopPrioritiesQuerySchema = z.object({
     .describe('Optional timeframe filter (e.g., "today", "this week") - defaults to "today"'),
 })
 
+export const DeleteAllTasksCommandSchema = z
+  .object({})
+  .describe('Command to delete all tasks (no parameters needed)')
+
+export const CompleteAllTasksCommandSchema = z
+  .object({})
+  .describe('Command to mark all tasks as completed (no parameters needed)')
+
+export const ClearCompletedTasksCommandSchema = z
+  .object({})
+  .describe('Command to delete all completed tasks (no parameters needed)')
+
+export const UpdateTaskCommandSchema = z.object({
+  taskIdentifier: z
+    .string()
+    .min(MIN_STRING_LENGTH, 'Task title or id is required')
+    .describe('The task identifier: either the full task title, partial title match, or task ID'),
+  priority: prioritySchema.optional().describe('Optional priority level to update (low, medium, or high)'),
+  dueDate: z
+    .string()
+    .optional()
+    .describe('Optional due date in ISO-8601 format to update'),
+  description: z.string().optional().describe('Optional description to update'),
+})
+
+export const UpdateAllTasksPriorityCommandSchema = z.object({
+  priority: prioritySchema.describe('Priority level to set for all tasks: low, medium, or high'),
+})
+
 export type AddTaskCommand = z.infer<typeof AddTaskCommandSchema>
 export type ListTasksQuery = z.infer<typeof ListTasksQuerySchema>
 export type MarkTaskDoneCommand = z.infer<typeof MarkTaskDoneCommandSchema>
@@ -77,3 +106,8 @@ export type DeleteTaskCommand = z.infer<typeof DeleteTaskCommandSchema>
 export type ListOverdueTasksQuery = z.infer<typeof ListOverdueTasksQuerySchema>
 export type RenameTaskCommand = z.infer<typeof RenameTaskCommandSchema>
 export type ListTopPrioritiesQuery = z.infer<typeof ListTopPrioritiesQuerySchema>
+export type DeleteAllTasksCommand = z.infer<typeof DeleteAllTasksCommandSchema>
+export type CompleteAllTasksCommand = z.infer<typeof CompleteAllTasksCommandSchema>
+export type ClearCompletedTasksCommand = z.infer<typeof ClearCompletedTasksCommandSchema>
+export type UpdateTaskCommand = z.infer<typeof UpdateTaskCommandSchema>
+export type UpdateAllTasksPriorityCommand = z.infer<typeof UpdateAllTasksPriorityCommandSchema>

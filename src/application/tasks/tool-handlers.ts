@@ -6,6 +6,11 @@ import type {
   ListOverdueTasksQuery,
   RenameTaskCommand,
   ListTopPrioritiesQuery,
+  DeleteAllTasksCommand,
+  CompleteAllTasksCommand,
+  ClearCompletedTasksCommand,
+  UpdateTaskCommand,
+  UpdateAllTasksPriorityCommand,
 } from '../../domain/task/task-commands'
 import { TASK_MESSAGES } from '../ai/task-config'
 import { ResponseBuilder } from '../../infrastructure/http/response-builder'
@@ -100,5 +105,53 @@ export class ToolHandlers {
         ? TASK_MESSAGES.noTopPriorities
         : `${TASK_MESSAGES.topPrioritiesHeader}\n\n${formatted}`
     return ResponseBuilder.response(message)
+  }
+
+  async handleDeleteAllTasks(_args: DeleteAllTasksCommand): Promise<Response> {
+    log('executing deleteAllTasks')
+    const deletedCount = await this.taskService.deleteAllTasks({})
+    return ResponseBuilder.response(TASK_MESSAGES.allTasksDeleted(deletedCount))
+  }
+
+  async handleCompleteAllTasks(_args: CompleteAllTasksCommand): Promise<Response> {
+    log('executing completeAllTasks')
+    const completed = await this.taskService.completeAllTasks({})
+    return ResponseBuilder.response(TASK_MESSAGES.allTasksCompleted(completed.length))
+  }
+
+  async handleClearCompletedTasks(_args: ClearCompletedTasksCommand): Promise<Response> {
+    log('executing clearCompletedTasks')
+    const deletedCount = await this.taskService.clearCompletedTasks({})
+    return ResponseBuilder.response(TASK_MESSAGES.completedTasksCleared(deletedCount))
+  }
+
+  async handleUpdateTask(args: UpdateTaskCommand): Promise<Response> {
+    log('executing updateTask', { args })
+    try {
+      const task = await this.taskService.updateTask(args)
+      const updates: string[] = []
+      if (args.priority) updates.push(`priority to ${args.priority}`)
+      if (args.dueDate !== undefined) updates.push(`due date`)
+      if (args.description !== undefined) updates.push(`description`)
+      const message = `Successfully updated task "${task.title}"${updates.length > 0 ? `: ${updates.join(', ')}` : ''}.`
+      return ResponseBuilder.response(message)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      if (message.includes('not found')) {
+        return ResponseBuilder.clarification(TASK_MESSAGES.taskNotFound(args.taskIdentifier))
+      }
+      throw error
+    }
+  }
+
+  async handleUpdateAllTasksPriority(args: UpdateAllTasksPriorityCommand): Promise<Response> {
+    log('executing updateAllTasksPriority', { args })
+    const updated = await this.taskService.updateAllTasksPriority(args)
+    const count = updated.length
+    return ResponseBuilder.response(
+      count === 0
+        ? 'No tasks to update.'
+        : `Successfully updated priority to ${args.priority} for ${count} task${count === 1 ? '' : 's'}.`
+    )
   }
 }

@@ -18,6 +18,7 @@ export type ToolDefinition = { name: string; parameters: z.ZodTypeAny }
 export type ReasoningResult =
   | { type: 'clarification'; message: string }
   | { type: 'tool_call'; toolCall: { name: string; args: unknown } }
+  | { type: 'tool_calls'; toolCalls: Array<{ name: string; args: unknown }> }
   | { type: 'response'; message: string }
 
 /** Context passed into reasoning (e.g. current time). */

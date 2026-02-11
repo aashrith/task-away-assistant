@@ -8,6 +8,11 @@ import {
   ListOverdueTasksQuerySchema,
   RenameTaskCommandSchema,
   ListTopPrioritiesQuerySchema,
+  DeleteAllTasksCommandSchema,
+  CompleteAllTasksCommandSchema,
+  ClearCompletedTasksCommandSchema,
+  UpdateTaskCommandSchema,
+  UpdateAllTasksPriorityCommandSchema,
 } from '../../domain/task/task-commands'
 
 /**
@@ -23,6 +28,11 @@ export {
   ListOverdueTasksQuerySchema as listOverdueTasksArgsSchema,
   RenameTaskCommandSchema as renameTaskArgsSchema,
   ListTopPrioritiesQuerySchema as listTopPrioritiesArgsSchema,
+  DeleteAllTasksCommandSchema as deleteAllTasksArgsSchema,
+  CompleteAllTasksCommandSchema as completeAllTasksArgsSchema,
+  ClearCompletedTasksCommandSchema as clearCompletedTasksArgsSchema,
+  UpdateTaskCommandSchema as updateTaskArgsSchema,
+  UpdateAllTasksPriorityCommandSchema as updateAllTasksPriorityArgsSchema,
 }
 
 /** Alias for chat/streaming tool. */
@@ -37,6 +47,11 @@ export const toolSchemasByName: Record<string, z.ZodTypeAny> = {
   listOverdueTasks: ListOverdueTasksQuerySchema,
   renameTask: RenameTaskCommandSchema,
   listTopPriorities: ListTopPrioritiesQuerySchema,
+  deleteAllTasks: DeleteAllTasksCommandSchema,
+  completeAllTasks: CompleteAllTasksCommandSchema,
+  clearCompletedTasks: ClearCompletedTasksCommandSchema,
+  updateTask: UpdateTaskCommandSchema,
+  updateAllTasksPriority: UpdateAllTasksPriorityCommandSchema,
 }
 
 export const requiredFieldsPerIntent: Record<string, string[]> = {
@@ -47,4 +62,9 @@ export const requiredFieldsPerIntent: Record<string, string[]> = {
   listOverdueTasks: [],
   renameTask: ['taskIdentifier', 'newTitle'],
   listTopPriorities: [],
+  deleteAllTasks: [],
+  completeAllTasks: [],
+  clearCompletedTasks: [],
+  updateTask: ['taskIdentifier'], // priority, dueDate, description are optional
+  updateAllTasksPriority: ['priority'],
 }

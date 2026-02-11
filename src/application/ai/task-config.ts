@@ -35,4 +35,16 @@ export const TASK_MESSAGES = {
   taskListHeader: 'Here are your tasks:',
   overdueTasksHeader: 'Here are your overdue tasks:',
   topPrioritiesHeader: 'Here are your top priority tasks:',
+  allTasksDeleted: (count: number) =>
+    count === 0
+      ? 'No tasks to delete.'
+      : `Successfully deleted ${count} task${count === 1 ? '' : 's'}.`,
+  allTasksCompleted: (count: number) =>
+    count === 0
+      ? 'No active tasks to complete.'
+      : `Successfully marked ${count} task${count === 1 ? '' : 's'} as completed.`,
+  completedTasksCleared: (count: number) =>
+    count === 0
+      ? 'No completed tasks to clear.'
+      : `Successfully cleared ${count} completed task${count === 1 ? '' : 's'}.`,
 } as const

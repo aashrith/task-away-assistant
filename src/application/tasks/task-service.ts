@@ -8,6 +8,11 @@ import type {
   ListOverdueTasksQuery,
   RenameTaskCommand,
   ListTopPrioritiesQuery,
+  DeleteAllTasksCommand,
+  CompleteAllTasksCommand,
+  ClearCompletedTasksCommand,
+  UpdateTaskCommand,
+  UpdateAllTasksPriorityCommand,
 } from '../../domain/task/task-commands'
 
 export type { AddTaskCommand } from '../../domain/task/task-commands'
@@ -19,6 +24,12 @@ import { DeleteTaskUseCase } from './delete-task.use-case'
 import { ListOverdueTasksUseCase } from './list-overdue-tasks.use-case'
 import { RenameTaskUseCase } from './rename-task.use-case'
 import { ListTopPrioritiesUseCase } from './list-top-priorities.use-case'
+import { DeleteAllTasksUseCase } from './delete-all-tasks.use-case'
+import { CompleteAllTasksUseCase } from './complete-all-tasks.use-case'
+import { ClearCompletedTasksUseCase } from './clear-completed-tasks.use-case'
+import { UpdateTaskUseCase } from './update-task.use-case'
+import { UpdateAllTasksPriorityUseCase } from './update-all-tasks-priority.use-case'
+import { TaskFinder } from './task-finder'
 import { TaskFormatter } from './task-formatter'
 
 /**
@@ -33,9 +44,16 @@ export class TaskService {
   private readonly listOverdueTasksUseCase: ListOverdueTasksUseCase
   private readonly renameTaskUseCase: RenameTaskUseCase
   private readonly listTopPrioritiesUseCase: ListTopPrioritiesUseCase
+  private readonly deleteAllTasksUseCase: DeleteAllTasksUseCase
+  private readonly completeAllTasksUseCase: CompleteAllTasksUseCase
+  private readonly clearCompletedTasksUseCase: ClearCompletedTasksUseCase
+  private readonly updateTaskUseCase: UpdateTaskUseCase
+  private readonly updateAllTasksPriorityUseCase: UpdateAllTasksPriorityUseCase
+  private readonly finder: TaskFinder
   private readonly formatter: TaskFormatter
 
   constructor(private readonly repository: TaskRepository) {
+    this.finder = new TaskFinder(repository)
     this.addTaskUseCase = new AddTaskUseCase(repository)
     this.listTasksUseCase = new ListTasksUseCase(repository)
     this.markTaskDoneUseCase = new MarkTaskDoneUseCase(repository)
@@ -43,6 +61,11 @@ export class TaskService {
     this.listOverdueTasksUseCase = new ListOverdueTasksUseCase(repository)
     this.renameTaskUseCase = new RenameTaskUseCase(repository)
     this.listTopPrioritiesUseCase = new ListTopPrioritiesUseCase(repository)
+    this.deleteAllTasksUseCase = new DeleteAllTasksUseCase(repository)
+    this.completeAllTasksUseCase = new CompleteAllTasksUseCase(repository)
+    this.clearCompletedTasksUseCase = new ClearCompletedTasksUseCase(repository)
+    this.updateTaskUseCase = new UpdateTaskUseCase(repository, this.finder)
+    this.updateAllTasksPriorityUseCase = new UpdateAllTasksPriorityUseCase(repository)
     this.formatter = new TaskFormatter()
   }
 
@@ -72,6 +95,26 @@ export class TaskService {
 
   async listTopPriorities(query: ListTopPrioritiesQuery = {}): Promise<Task[]> {
     return this.listTopPrioritiesUseCase.execute(query)
+  }
+
+  async deleteAllTasks(_command: DeleteAllTasksCommand = {}): Promise<number> {
+    return this.deleteAllTasksUseCase.execute()
+  }
+
+  async completeAllTasks(_command: CompleteAllTasksCommand = {}): Promise<Task[]> {
+    return this.completeAllTasksUseCase.execute()
+  }
+
+  async clearCompletedTasks(_command: ClearCompletedTasksCommand = {}): Promise<number> {
+    return this.clearCompletedTasksUseCase.execute()
+  }
+
+  async updateTask(command: UpdateTaskCommand): Promise<Task> {
+    return this.updateTaskUseCase.execute(command)
+  }
+
+  async updateAllTasksPriority(command: UpdateAllTasksPriorityCommand): Promise<Task[]> {
+    return this.updateAllTasksPriorityUseCase.execute(command)
   }
 
   formatTasksForChat(tasks: Task[]): string {

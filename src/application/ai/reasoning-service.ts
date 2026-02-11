@@ -39,6 +39,7 @@ export async function reason(
   const intent = object.intent
   const raw: Record<string, unknown> = {
     ...(object.title && { title: object.title }),
+    ...(object.titles && { titles: object.titles }),
     ...(object.description && { description: object.description }),
     ...(object.priority && { priority: object.priority }),
     ...(object.dueDate && { dueDate: object.dueDate }),
@@ -48,6 +49,13 @@ export async function reason(
     ...(object.limit && { limit: object.limit }),
   }
   log('intent', { intent, raw })
+
+  if (intent === 'help') {
+    return {
+      type: 'response',
+      message: AI_MESSAGES.help,
+    }
+  }
 
   if (intent === 'other') {
     return {
@@ -83,6 +91,53 @@ export async function reason(
     } else {
       // Remove invalid limit - will use default
       delete raw.limit
+    }
+  }
+
+  // Handle multiple tasks for addTask intent
+  if (intent === 'addTask' && raw.titles && typeof raw.titles === 'string' && raw.titles.trim()) {
+    // Parse multiple task titles
+    const titles = raw.titles
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+    
+    // Include the first title from the title field if it's different
+    const firstTitle = typeof raw.title === 'string' ? raw.title.trim() : ''
+    if (firstTitle && !titles.includes(firstTitle)) {
+      titles.unshift(firstTitle)
+    }
+
+    if (titles.length > 1) {
+      // Create multiple tool calls for multiple tasks
+      const toolCalls: Array<{ name: string; args: unknown }> = []
+      for (const title of titles) {
+        const taskRaw: Record<string, unknown> = {
+          title,
+        }
+        if (raw.description && typeof raw.description === 'string') {
+          taskRaw.description = raw.description
+        }
+        if (raw.priority && typeof raw.priority === 'string') {
+          taskRaw.priority = raw.priority
+        }
+        if (raw.dueDate && typeof raw.dueDate === 'string') {
+          taskRaw.dueDate = raw.dueDate
+        }
+        const taskSchema = toolSchemasByName[intent]
+        const parsed = taskSchema?.safeParse(taskRaw)
+        if (parsed?.success) {
+          toolCalls.push({ name: intent, args: parsed.data })
+        }
+      }
+
+      if (toolCalls.length > 0) {
+        log('multiple_tool_calls', { count: toolCalls.length })
+        return {
+          type: 'tool_calls',
+          toolCalls,
+        }
+      }
     }
   }
 

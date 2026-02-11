@@ -6,6 +6,11 @@ import type {
   ListOverdueTasksQuery,
   RenameTaskCommand,
   ListTopPrioritiesQuery,
+  DeleteAllTasksCommand,
+  CompleteAllTasksCommand,
+  ClearCompletedTasksCommand,
+  UpdateTaskCommand,
+  UpdateAllTasksPriorityCommand,
 } from '../../domain/task/task-commands'
 import { AI_MESSAGES } from '../ai/ai-config'
 import { ResponseBuilder } from '../../infrastructure/http/response-builder'
@@ -39,6 +44,21 @@ export class ToolHandlerRegistry {
 
       case 'listTopPriorities':
         return this.handlers.handleListTopPriorities(args as ListTopPrioritiesQuery)
+
+      case 'deleteAllTasks':
+        return this.handlers.handleDeleteAllTasks(args as DeleteAllTasksCommand)
+
+      case 'completeAllTasks':
+        return this.handlers.handleCompleteAllTasks(args as CompleteAllTasksCommand)
+
+      case 'clearCompletedTasks':
+        return this.handlers.handleClearCompletedTasks(args as ClearCompletedTasksCommand)
+
+      case 'updateTask':
+        return this.handlers.handleUpdateTask(args as UpdateTaskCommand)
+
+      case 'updateAllTasksPriority':
+        return this.handlers.handleUpdateAllTasksPriority(args as UpdateAllTasksPriorityCommand)
 
       default:
         return ResponseBuilder.response(AI_MESSAGES.actionNotImplemented(toolName))

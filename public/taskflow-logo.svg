@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <!-- Glow filter for subtle illumination effect on black background -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Icon: Stylized inverted Y shape - same as favicon, scaled and positioned to align with text -->
+  <!-- Icon center (y=100) scaled 0.5x = y=50. Text baseline y=70. -->
+  <!-- Moving icon down significantly to align bottom of icon with text baseline -->
+  <g transform="translate(0, 6) scale(0.5)">
+    <!-- Left branch: curves from bottom center, up and left, then curves back inward -->
+    <path d="M 100 160 
+             Q 70 140 50 100 
+             Q 60 70 80 50" 
+          fill="none" 
+          stroke="#FFFFFF" 
+          stroke-width="16" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          filter="url(#glow)"
+          opacity="0.98"/>
+    
+    <!-- Right branch: curves from bottom center, up and right, then curves back inward -->
+    <path d="M 100 160 
+             Q 130 140 150 100 
+             Q 140 70 120 50" 
+          fill="none" 
+          stroke="#FFFFFF" 
+          stroke-width="16" 
+          stroke-linecap="round" 
+          stroke-linejoin="round"
+          filter="url(#glow)"
+          opacity="0.98"/>
+  </g>
+  
+  <!-- Text: "Taskflow" - Prominent branding -->
+  <text x="120" y="70" 
+        font-family="system-ui, -apple-system, sans-serif" 
+        font-size="52" 
+        font-weight="700" 
+        fill="#FFFFFF" 
+        letter-spacing="-1px"
+        filter="url(#glow)"
+        opacity="1"
+        dominant-baseline="alphabetic">Taskflow</text>
+</svg>
