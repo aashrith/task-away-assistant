@@ -1,4 +1,4 @@
-import type { Task, TaskId } from './Task'
+import type { Task, TaskId } from './task'
 
 /**
  * Abstraction over task persistence.

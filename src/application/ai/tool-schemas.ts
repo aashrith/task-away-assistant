@@ -6,6 +6,8 @@ import {
   MarkTaskDoneCommandSchema,
   DeleteTaskCommandSchema,
   ListOverdueTasksQuerySchema,
+  RenameTaskCommandSchema,
+  ListTopPrioritiesQuerySchema,
 } from '../../domain/task/task-commands'
 
 /**
@@ -19,6 +21,8 @@ export {
   MarkTaskDoneCommandSchema as markTaskDoneArgsSchema,
   DeleteTaskCommandSchema as deleteTaskArgsSchema,
   ListOverdueTasksQuerySchema as listOverdueTasksArgsSchema,
+  RenameTaskCommandSchema as renameTaskArgsSchema,
+  ListTopPrioritiesQuerySchema as listTopPrioritiesArgsSchema,
 }
 
 /** Alias for chat/streaming tool. */
@@ -31,12 +35,16 @@ export const toolSchemasByName: Record<string, z.ZodTypeAny> = {
   markTaskDone: MarkTaskDoneCommandSchema,
   deleteTask: DeleteTaskCommandSchema,
   listOverdueTasks: ListOverdueTasksQuerySchema,
+  renameTask: RenameTaskCommandSchema,
+  listTopPriorities: ListTopPrioritiesQuerySchema,
 }
 
 export const requiredFieldsPerIntent: Record<string, string[]> = {
-  addTask: ['title', 'dueDate', 'priority'],
+  addTask: ['title'], // dueDate and priority are optional
   listTasks: [],
   markTaskDone: ['taskIdentifier'],
   deleteTask: ['taskIdentifier'],
   listOverdueTasks: [],
+  renameTask: ['taskIdentifier', 'newTitle'],
+  listTopPriorities: [],
 }
