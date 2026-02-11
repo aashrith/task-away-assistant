@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { AppShell } from '../ui/layout/AppShell'
+import { AppShell } from '../components/layout/AppShell'
 import { taskService } from '../../server/task-context'
 
 export const Route = createFileRoute('/')({

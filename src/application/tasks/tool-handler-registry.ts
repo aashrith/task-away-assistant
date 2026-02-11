@@ -14,10 +14,12 @@ import type {
 } from '../../domain/task/task-commands'
 import { AI_MESSAGES } from '../ai/ai-config'
 import { ResponseBuilder } from '../../infrastructure/http/response-builder'
+import { createModuleLogger } from '../../infrastructure/logger'
+
+const log = createModuleLogger('tool-registry')
 
 /**
- * Registry mapping tool names to their handlers.
- * Centralizes tool routing logic.
+ * Routes tool names to the corresponding handler. Unknown tools return a typed error response.
  */
 export class ToolHandlerRegistry {
   constructor(private readonly handlers: ToolHandlers) {}
@@ -61,6 +63,7 @@ export class ToolHandlerRegistry {
         return this.handlers.handleUpdateAllTasksPriority(args as UpdateAllTasksPriorityCommand)
 
       default:
+        log('unknown tool', { toolName })
         return ResponseBuilder.response(AI_MESSAGES.actionNotImplemented(toolName))
     }
   }

@@ -1,0 +1,32 @@
+@startuml agency-components
+!theme plain
+title Task Away Assistant — Agent components
+
+package "Server" {
+  [ChatHandler] as CH
+  [streamReasoning] as SR
+  [ToolHandlerRegistry] as REG
+  [ToolHandlers] as TH
+  [TaskService] as TS
+  database "InMemoryTaskRepository" as REPO
+}
+
+cloud "OpenAI" {
+  [LLM] as LLM
+}
+
+CH --> SR : messages, taskService, context
+SR --> LLM : streamText(system, messages, tools)
+SR ..> REG : buildToolsRecord()
+SR ..> TH : ToolHandlers(taskService, executionContext)
+REG --> TH : execute(name, args)
+TH --> TS : addFromInput, listTasks, markTaskDone, ...
+TS --> REPO : add, list, update, delete
+LLM ..> REG : tool execute callback (during stream)
+
+note right of SR
+  ExecutionContext: request-scoped
+  lastAffectedTaskId, addTaskCallsThisRequest
+end note
+
+@enduml

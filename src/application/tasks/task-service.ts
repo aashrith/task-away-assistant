@@ -117,6 +117,14 @@ export class TaskService {
     return this.updateAllTasksPriorityUseCase.execute(command)
   }
 
+  /**
+   * Find candidate tasks matching a user-provided identifier.
+   * Used for ambiguity detection and clarification messages.
+   */
+  async findTasksByIdentifier(identifier: string): Promise<Task[]> {
+    return this.finder.findCandidates(identifier)
+  }
+
   formatTasksForChat(tasks: Task[]): string {
     return this.formatter.formatTasksForChat(tasks)
   }

@@ -2,10 +2,9 @@ import { InMemoryTaskRepository } from '../src/infrastructure/task/in-memory-tas
 import { TaskService } from '../src/application/tasks/task-service'
 
 /**
- * Task service context for server-side usage.
- *
- * Creates and exports a singleton TaskService instance with an in-memory repository.
- * This is used by API handlers and route loaders.
+ * Server-side task context: singleton TaskService backed by in-memory storage.
+ * Used by POST /api/chat and GET /api/tasks. Replace InMemoryTaskRepository
+ * with a persistent implementation (e.g. DB) for production.
  */
 const taskRepository = new InMemoryTaskRepository()
 export const taskService = new TaskService(taskRepository)

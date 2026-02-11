@@ -1,0 +1,57 @@
+@startuml agency-multistep-tool-calling
+!theme plain
+title Task Away Assistant — Multistep tool-calling (agent) flow
+
+actor User
+participant "Client\n(useChat)" as Client
+participant "ChatHandler\nPOST /api/chat" as API
+participant "RequestValidator" as Validator
+participant "streamReasoning" as Reasoning
+participant "ExecutionContext" as Ctx
+participant "ToolRegistry" as Registry
+participant "ToolHandlers" as Handlers
+participant "TaskService" as TaskSvc
+participant "Repository" as Repo
+participant "LLM\n(OpenAI)" as LLM
+
+User -> Client: Send message
+Client -> API: POST /api/chat { messages }
+
+API -> API: parseRequestBody()
+API -> Validator: validateChatRequest(body)
+Validator --> API: ValidatedMessage[]
+
+API -> Reasoning: streamReasoning(messages, taskService, context)
+
+Reasoning -> Ctx: createTaskExecutionContext()
+Reasoning -> Handlers: new ToolHandlers(taskService, executionContext)
+Reasoning -> Registry: new ToolHandlerRegistry(handlers)
+Reasoning -> Reasoning: buildToolsRecord(registry, schemas)
+Reasoning -> Reasoning: messagesForContext(messages)
+
+Reasoning -> LLM: streamText(system, messages, tools)
+
+loop ReAct loop (until done or no more tool calls)
+  LLM -> LLM: Thought (reason: greeting? task intent? missing info?)
+  alt Model calls a tool
+    LLM -> Registry: execute(toolName, args)
+    Registry -> Handlers: handleXxx(args)
+    Handlers -> Ctx: read/update lastAffectedTaskId
+    Handlers -> TaskSvc: e.g. addFromInput, listTasks, markTaskDone, ...
+    TaskSvc -> Repo: add / list / update / delete
+    Repo --> TaskSvc: Task(s) or result
+    TaskSvc --> Handlers: result
+    Handlers --> Registry: Response { message }
+    Registry --> LLM: observation (tool result string)
+    LLM -> LLM: Thought (use observation; next action or final reply)
+  else Model replies with text only
+    LLM --> Client: stream text
+  end
+end
+
+LLM --> Reasoning: toUIMessageStream()
+Reasoning --> API: createUIMessageStreamResponse(stream)
+API --> Client: Response (SSE stream)
+Client --> User: Display messages + tool invocations/results
+
+@enduml

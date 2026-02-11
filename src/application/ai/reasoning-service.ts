@@ -1,4 +1,4 @@
-import { streamText, tool } from 'ai'
+import { streamText, tool, createUIMessageStreamResponse } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import type { z } from 'zod'
 
@@ -7,15 +7,49 @@ import { DEFAULT_SYSTEM_PROMPT, DEFAULT_AI_MODEL, LOG_TRUNCATION_LENGTH } from '
 import { toolSchemasByName } from './tool-schemas'
 import { createModuleLogger } from '../../infrastructure/logger'
 import type { TaskService } from '../tasks/task-service'
+import { createTaskExecutionContext } from '../tasks/execution-context'
 import { ToolHandlers } from '../tasks/tool-handlers'
 import { ToolHandlerRegistry } from '../tasks/tool-handler-registry'
 
 const log = createModuleLogger('reasoning')
 
+/** Max messages to send so the model has multi-turn context without blowing the context window. */
+const MAX_CONTEXT_MESSAGES = 50
+
 /**
- * Streaming reasoning service with native tool calling.
- * Uses streamText with tools for real-time streaming responses.
- * Tool execution happens during streaming, and the AI responds conversationally.
+ * Trims to the last N messages so the model has multi-turn context without exceeding the context window.
+ */
+function messagesForContext(messages: CoreMessage[]): CoreMessage[] {
+  if (messages.length === 0) return messages
+  if (messages.length <= MAX_CONTEXT_MESSAGES) return messages
+  return messages.slice(-MAX_CONTEXT_MESSAGES)
+}
+
+/**
+ * Builds the tools record for the AI SDK: one entry per schema, execute delegates to the registry.
+ * Typed as Record<string, unknown> to avoid SDK generic mismatch (Tool<unknown> vs Tool<never>).
+ */
+function buildToolsRecord(
+  toolRegistry: ToolHandlerRegistry,
+  schemas: Record<string, z.ZodTypeAny>
+): Record<string, unknown> {
+  const record: Record<string, unknown> = {}
+  for (const [name, schema] of Object.entries(schemas)) {
+    record[name] = tool({
+      description: `Tool for ${name}. Use when the user wants to ${name.replace(/([A-Z])/g, ' $1').toLowerCase()}.`,
+      inputSchema: schema,
+      execute: async (args: unknown) => {
+        const response = await toolRegistry.execute(name, args)
+        const data = (await response.json()) as { message?: string }
+        return data.message ?? 'Operation completed'
+      },
+    })
+  }
+  return record
+}
+
+/**
+ * Streaming reasoning with tool calling. Returns a Response (UI message stream) for useChat.
  */
 export async function streamReasoning(
   messages: CoreMessage[],
@@ -30,55 +64,37 @@ export async function streamReasoning(
   })
 
   if (!lastUser.trim()) {
-    // Return empty message response as stream
     const { ResponseBuilder } = await import('../../infrastructure/http/response-builder')
     const { AI_MESSAGES } = await import('./ai-config')
     return ResponseBuilder.streamResponse(AI_MESSAGES.emptyUserMessage)
   }
 
-  // Set up tool handlers
-  const toolHandlers = new ToolHandlers(taskService)
+  const executionContext = createTaskExecutionContext()
+  const toolHandlers = new ToolHandlers(taskService, executionContext)
   const toolRegistry = new ToolHandlerRegistry(toolHandlers)
 
-  // Convert tool schemas to AI SDK tool definitions
-  // Use zodSchema() helper to ensure proper Zod v4 to JSON Schema conversion
-  const toolsRecord: Record<string, any> = {}
-  
-  for (const [name, schema] of Object.entries(toolSchemasByName)) {
-    // Pass Zod schema directly to tool() - it handles conversion internally
-    // The tool() function expects inputSchema, not parameters
-    const zodSchemaInstance = schema as z.ZodTypeAny
-    
-    // Create tool - tool() will automatically convert Zod schema to JSON Schema
-    toolsRecord[name] = tool({
-      description: `Tool for ${name} operation. Use this when the user wants to ${name.replace(/([A-Z])/g, ' $1').toLowerCase()}.`,
-      inputSchema: zodSchemaInstance,
-      execute: async (args: any) => {
-        const response = await toolRegistry.execute(name, args)
-        const responseData = await response.json()
-        return responseData.message || 'Operation completed'
-      },
-    })
-  }
+  const toolsRecord = buildToolsRecord(toolRegistry, toolSchemasByName)
+  const contextMessages = messagesForContext(messages)
+  log('context messages', { total: messages.length, sent: contextMessages.length })
 
   const nowIso = context.now.toISOString()
   const systemPrompt = `${DEFAULT_SYSTEM_PROMPT}
 
 Current time: ${nowIso}.
 
-When executing tools, provide conversational responses to the user. Be helpful and confirm actions clearly.`
+For this turn: Let's think step by step. (1) If the message is only a greeting (hello, hi, hey)—reply in text only; do not call any tool. (2) Otherwise: analyze task intent, use history for "that"/"it", then decide: tool, clarification, or direct reply. (3) Act. (4) After any tool run, use the observation to reply.`
 
-  // Stream text with tool calling
-  const streamOptions: any = {
-    model: openai(process.env.AI_MODEL || DEFAULT_AI_MODEL),
+  const model = openai(process.env.AI_MODEL ?? DEFAULT_AI_MODEL)
+  const result = streamText({
+    model,
     system: systemPrompt,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    tools: toolsRecord,
-  }
-  const result = streamText(streamOptions)
+    messages: contextMessages.map((m) => ({ role: m.role, content: m.content })),
+    tools: toolsRecord as Parameters<typeof streamText>[0]['tools'],
+  })
 
-  // Return streaming response in AI SDK data stream format
-  return result.toTextStreamResponse()
+  return createUIMessageStreamResponse({
+    stream: result.toUIMessageStream(),
+  })
 }
 
 /**

@@ -1,9 +1,10 @@
 import type { EventHandler } from 'h3'
-import { readBody, HTTPError } from 'h3'
+import { readBody, HTTPError, getMethod } from 'h3'
 
 import type { TaskService } from '../../../src/application/tasks/task-service'
 import { streamReasoning } from '../../../src/application/ai/reasoning-service'
 import { RequestValidator } from '../../../src/infrastructure/http/request-validator'
+import type { ValidatedMessage } from '../../../src/infrastructure/http/request-validator'
 import {
   HTTP_STATUS,
   ERROR_CODES,
@@ -17,27 +18,28 @@ export interface ChatHandlerDependencies {
   taskService: TaskService
 }
 
+/** Request body shape expected from the chat client. */
+interface ChatRequestBody {
+  messages?: unknown[]
+}
+
 /**
- * Class-based handler for chat API requests.
- * Uses streaming reasoning service with native tool calling.
- *
- * Responsibilities:
- * - Parse and validate incoming chat requests
- * - Convert messages to CoreMessage format
- * - Delegate to streaming reasoning service
- * - Handle errors and return appropriate HTTP responses
+ * Handles POST /api/chat: validates body, runs streaming reasoning, returns stream response.
+ * Errors are mapped to HTTP responses; H3 propagates thrown HTTPError.
  */
 export class ChatHandler {
   constructor(private readonly dependencies: ChatHandlerDependencies) {}
 
-  /**
-   * Creates an H3 event handler for chat POST requests.
-   * @returns EventHandler function that processes chat requests
-   */
   createHandler(): EventHandler {
     return async (event) => {
       try {
-        const body = await this.parseRequestBody(event)
+        const method = getMethod(event)
+        log('request', { method, path: event.path })
+
+        const body = await this.parseRequestBody(event) as ChatRequestBody | null
+        const messageCount = Array.isArray(body?.messages) ? body.messages.length : 0
+        log('body parsed', { messageCount })
+
         const validMessages = RequestValidator.validateChatRequest(body)
         const coreMessages = this.convertToCoreMessages(validMessages)
         const context = { now: new Date() }
@@ -48,9 +50,10 @@ export class ChatHandler {
           context
         )
 
-        log('streaming response')
+        log('streaming started', { status: response.status })
         return response
       } catch (error) {
+        log('handler error', { error: error instanceof Error ? error.message : String(error) })
         return this.handleError(error)
       }
     }
@@ -78,18 +81,8 @@ export class ChatHandler {
     }
   }
 
-  /**
-   * Converts validated messages to CoreMessage format.
-   * @param validMessages - Validated messages from request validator
-   * @returns Array of CoreMessage objects
-   */
-  private convertToCoreMessages(
-    validMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
-  ): Array<{ role: 'user' | 'assistant' | 'system'; content: string }> {
-    return validMessages.map((message) => ({
-      role: message.role,
-      content: message.content,
-    }))
+  private convertToCoreMessages(validMessages: ValidatedMessage[]): ValidatedMessage[] {
+    return validMessages.map((m) => ({ role: m.role, content: m.content }))
   }
 
   /**

@@ -1,80 +1,124 @@
 # Task Away Assistant
 
-AI-powered chat-based task manager built on TanStack Start. 
+AI-powered chat-based task manager built on TanStack Start.
 
 ## Stack
 
 - **Runtime**: TanStack Start (React, Vite, Nitro)
 - **Language**: TypeScript end-to-end
-- **UI**: AI Elements + custom CSS (no Tailwind)
-- **AI**: Vercel AI SDK (streaming + tool calling)
-- **Data**: SQLite in dev behind a repository abstraction
+- **UI**: Tailwind CSS, Radix UI primitives, custom CSS
+- **AI**: Vercel AI SDK (streaming + tool calling, ReAct-style prompts)
+- **Data**: In-memory store behind a repository abstraction (swap for SQLite/DB in production)
 
 ## Development
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev
 ```
 
-- App runs on the default Vite dev server port (see `package.json`).
-- Routing is file-based via `src/routes`.
+**Secrets:** Set `OPENAI_API_KEY` in `.env` ([get key](https://platform.openai.com/api-keys)). Server-only; never sent to the client.
+
+
+## Agency
+
+The assistant is a **ReAct agent**: it reasons (thought), calls tools (action), and uses tool results (observation) in a loop until the task is done—agency level is multistep tool-calling, not single-turn Q&A.
+
+**Multistep tool-calling (sequence):**
+
+![Agency flow — request → ReAct loop → stream](docs/agency.png)
+
+**Components (ChatHandler, streamReasoning, LLM, ToolHandlers, TaskService):**
+
+![Agency components](docs/agent-components.png)
+
+Source: [`docs/agency.puml`](docs/agency.puml), [`docs/agency-components.puml`](docs/agency-components.puml)
 
 ## Architecture
 
-- **domain**: core models and interfaces (no framework code)
-- **application**: use cases and orchestration
-- **infrastructure**: persistence, HTTP clients, adapters
-- **ui**: reusable view components
+- **domain**: Core models and interfaces (no framework code)
+- **application**: Use cases, AI reasoning, and task orchestration
+- **infrastructure**: Persistence, HTTP, logging
+- **components**: Reusable UI (layout, chat, tasks, primitives)
 - **routes**: TanStack route files that compose UI + application layer
-- **styles**: global and shared CSS
+- **styles**: Global and design tokens
+- **server**: API routes and request handlers (Nitro)
 
 ### Directory Structure
 
 ```
 src/
-├── domain/           # Core business logic (no framework dependencies)
+├── domain/                 # Core business logic (no framework dependencies)
 │   └── task/
-│       ├── task.ts                    # Domain entity
-│       ├── task-repository.ts         # Domain interface
-│       ├── task-commands.ts           # Commands/queries
-│       └── index.ts                   # Barrel export
+│       ├── task.ts              # Domain entity
+│       ├── task-repository.ts   # Repository interface
+│       ├── task-commands.ts     # Commands/queries (Zod schemas)
+│       └── index.ts
 │
-├── application/      # Use cases and orchestration
-│   ├── ai/
-│   │   ├── ai-config.ts              # AI configuration
-│   │   ├── task-config.ts            # Task configuration
-│   │   ├── config.ts                 # Barrel export
-│   │   ├── intent.ts                 # Intent detection
-│   │   ├── reasoning-service.ts      # Reasoning service
-│   │   ├── tool-schemas.ts           # Tool schemas
-│   │   ├── types.ts                  # Type definitions
-│   │   └── index.ts                  # Barrel export
-│   └── tasks/
-│       ├── task-service.ts           # Main service
-│       ├── *-use-case.ts             # Use cases
-│       ├── task-finder.ts            # Utilities
-│       ├── task-formatter.ts         # Utilities
-│       ├── tool-handlers.ts          # Tool handlers
-│       ├── tool-handler-registry.ts  # Registry
-│       └── index.ts                  # Barrel export
+├── application/
+│   ├── ai/                      # AI configuration and streaming
+│   │   ├── ai-config.ts         # System prompts, ReAct/CoT workflow
+│   │   ├── task-config.ts       # Task defaults, limits, messages
+│   │   ├── reasoning-service.ts # streamReasoning, tool wiring
+│   │   ├── tool-schemas.ts      # Zod schemas for tools
+│   │   ├── types.ts
+│   │   ├── intent.ts
+│   │   ├── config.ts
+│   │   └── index.ts
+│   └── tasks/                   # Task use cases and tool execution
+│       ├── task-service.ts      # Main service
+│       ├── *-use-case.ts        # Use cases (add, list, mark done, etc.)
+│       ├── task-finder.ts       # Resolve by id/title, ambiguity
+│       ├── task-formatter.ts
+│       ├── task-identifier-config.ts   # Pronoun handling
+│       ├── execution-context.ts # Request-scoped (e.g. last affected task)
+│       ├── tool-handlers.ts      # Tool implementation + guardrails
+│       ├── tool-handler-registry.ts
+│       └── index.ts
 │
-├── infrastructure/   # External concerns (persistence, HTTP, logging)
+├── infrastructure/
 │   ├── http/
-│   │   ├── http-constants.ts         # HTTP constants
-│   │   ├── request-validator.ts      # Request validation
-│   │   ├── response-builder.ts       # Response building
-│   │   └── index.ts                  # Barrel export
+│   │   ├── http-constants.ts
+│   │   ├── request-validator.ts
+│   │   ├── response-builder.ts
+│   │   └── index.ts
 │   ├── task/
-│   │   ├── in-memory-task-repository.ts  # Implementation
-│   │   └── index.ts                  # Barrel export
-│   └── logger.ts                     # Logging utility
+│   │   ├── in-memory-task-repository.ts
+│   │   └── index.ts
+│   └── logger.ts
 │
-├── routes/          # TanStack Router files
+├── components/
+│   ├── layout/             # AppShell
+│   ├── chat/               # ChatPanel
+│   ├── tasks/              # TasksPanel
+│   ├── ui/                 # Button, input, dialog, etc. (Radix-based)
+│   └── ai-elements/        # Conversation, message, prompt-input
+│
+├── routes/
 │   ├── __root.tsx
 │   └── index.tsx
 │
-├── router.tsx       # Router configuration
-└── routeTree.gen.ts # Generated route tree
+├── styles/
+│   ├── globals.css
+│   ├── reset.css
+│   └── tokens.css
+│
+├── lib/
+│   └── utils.ts
+│
+├── router.tsx
+├── routeTree.gen.ts
+└── styles.css
 ```
 
+```
+server/                      # Nitro API and handlers
+├── api/
+│   ├── chat.post.ts         # POST /api/chat (streaming)
+│   ├── tasks.get.ts         # GET /api/tasks
+│   └── handlers/
+│       ├── chat-handler.ts
+│       └── tasks-handler.ts
+└── task-context.ts          # Singleton TaskService for server
+```

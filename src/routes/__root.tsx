@@ -1,15 +1,7 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 
+import { NotFound } from '@/components/layout/NotFound'
 import appCss from '../styles.css?url'
-
-function NotFound() {
-  return (
-    <main style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>Not found</h1>
-      <p>The page you’re looking for doesn’t exist.</p>
-    </main>
-  )
-}
 
 export const Route = createRootRoute({
   notFoundComponent: NotFound,

@@ -1,6 +1,6 @@
 /**
- * Centralized logging utility with normalized format.
- * Format: [timestamp] [identifier] message [data]
+ * Centralized logging: [timestamp] [identifier] message [data].
+ * Logs only when DEBUG is set or NODE_ENV contains "dev". For production, set DEBUG for verbose logs.
  */
 
 type LogLevel = 'info' | 'debug' | 'warn' | 'error'

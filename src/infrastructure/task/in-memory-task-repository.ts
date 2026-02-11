@@ -19,10 +19,8 @@ function generateId(): TaskId {
 const log = createModuleLogger('repository')
 
 /**
- * Simple in-memory TaskRepository.
- *
- * Intended for development, tests, and as a default
- * implementation before wiring up SQLite.
+ * In-memory TaskRepository. State is lost on restart. Use for development and tests;
+ * replace with a persistent implementation (e.g. DB) for production.
  */
 export class InMemoryTaskRepository extends TaskRepository {
   private readonly tasks = new Map<TaskId, Task>()

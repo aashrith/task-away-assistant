@@ -1,6 +1,12 @@
 /**
- * Task-specific configuration: defaults, labels, and task-related messages.
+ * Task-specific configuration: defaults, labels, limits, and task-related messages.
  */
+
+/** Max tasks allowed in the system (prevents abuse). */
+export const MAX_TOTAL_TASKS = 500
+
+/** Max tasks that can be added in a single user message (per request). */
+export const MAX_ADDS_PER_MESSAGE = 10
 
 export const TASK_DEFAULTS = {
   priority: 'medium' as const,
@@ -47,4 +53,8 @@ export const TASK_MESSAGES = {
     count === 0
       ? 'No completed tasks to clear.'
       : `Successfully cleared ${count} completed task${count === 1 ? '' : 's'}.`,
+  tooManyTasksTotal: (max: number) =>
+    `Task limit reached (max ${max} tasks). Delete or clear completed tasks to add more.`,
+  tooManyAddsThisMessage: (max: number) =>
+    `You can add at most ${max} tasks per message. Add the first ${max}, then send another message for more.`,
 } as const
