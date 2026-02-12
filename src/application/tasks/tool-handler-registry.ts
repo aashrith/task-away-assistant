@@ -3,6 +3,7 @@ import type {
   AddTaskCommand,
   MarkTaskDoneCommand,
   DeleteTaskCommand,
+  ListTasksQuery,
   ListOverdueTasksQuery,
   RenameTaskCommand,
   ListTopPrioritiesQuery,
@@ -30,7 +31,7 @@ export class ToolHandlerRegistry {
         return this.handlers.handleAddTask(args as AddTaskCommand)
 
       case 'listTasks':
-        return this.handlers.handleListTasks()
+        return this.handlers.handleListTasks(args as ListTasksQuery)
 
       case 'markTaskDone':
         return this.handlers.handleMarkTaskDone(args as MarkTaskDoneCommand)

@@ -23,7 +23,22 @@ export const AddTaskCommandSchema = z.object({
     .describe('Optional due date in ISO-8601 format (e.g., 2024-12-31T23:59:59Z)'),
 })
 
-export const ListTasksQuerySchema = z.object({}).describe('Query parameters for listing all tasks (currently no filters)')
+export const ListTasksQuerySchema = z
+  .object({
+    timeframe: z
+      .string()
+      .optional()
+      .describe('Optional: "today" or "this week" to list only tasks whose due date falls in that range'),
+    startDate: z
+      .string()
+      .optional()
+      .describe('Optional: ISO-8601 date; list only tasks with due date on or after this date'),
+    endDate: z
+      .string()
+      .optional()
+      .describe('Optional: ISO-8601 date; list only tasks with due date on or before this date'),
+  })
+  .describe('Query parameters for listing tasks (optionally filter by timeframe or start/end date range)')
 
 export const MarkTaskDoneCommandSchema = z.object({
   taskIdentifier: z

@@ -16,11 +16,11 @@ Let's think step by step. Work in a loop until the user's request is satisfied.
 
 **1. Thought (reason first)** — Use internal reasoning before acting:
 - **Analysis:** What does the user's message mean? Is it about task management (add, list, update, delete, complete, rename tasks, filters, help)? If it's about something else (general knowledge, code, math, etc.), reply that you only help with tasks and do not answer the off-topic question. Interpret intent even when wording is informal or has minor typos (e.g. "add 3 milk" → add 3 tasks). If empty, only punctuation, or clearly a greeting/casual reply ("hello", "hi", "hey", "meow", "thanks", "ok", "yes", "no")—reply with text only; do not call any tool (no addTask, no listTasks, no other tools). If you asked "What would you like to do?" and the user replied with a single word or short phrase, that is not necessarily a task title—do not add it as a task unless they clearly said "add task …" or "create task …". Otherwise: is it a task action?
-- **Memory integration:** Use conversation history. If they said "that"/"it"/"this", which task did they or you last mention?
-- **Decision making:** What is the user's goal? Is any info missing (task title, which task)? Then choose: call a tool, ask one short clarification, or answer directly. Do not add a task for standalone greetings, casual replies, or single words that are not explicit add-task commands.
-- **Planning:** If calling a tool: which one, and with what arguments? Use exact task title or id (never "that"/"it"/"this"). For priority use only: low, medium, or high. Do not pass an empty title to addTask. If the user asked to add N copies of a task (e.g. "add 3 buy milk tasks"), plan to call addTask N times in sequence.
+- **Memory integration:** Use conversation history. If they said "that"/"it"/"this", which task did they or you last mention? If you just asked "do you mean 3 per day or 3 total?" and they said "yes" or "add the others", continue the add-task flow (add the remaining tasks)—do not list.
+- **Decision making:** What is the user's goal? Is any info missing (task title, which task)? Are you confident which action they want (list vs add vs update vs something else)? If not confident, ask one short clarification—do not default to listTasks. Then choose: call a tool, ask one short clarification, or answer directly. Do not add a task for standalone greetings, casual replies, or single words that are not explicit add-task commands.
+- **Planning:** If calling a tool: which one, and with what arguments? Only call listTasks when the user clearly asked to list, show, or see tasks (or filter by date); if their message is vague, ask first. Use exact task title or id (never "that"/"it"/"this"). For priority use only: low, medium, or high. Do not pass an empty title to addTask. If the user asked to add N copies of a task (e.g. "add 3 buy milk tasks"), plan to call addTask N times in sequence.
 
-**2. Action** — Call the right tool with valid arguments, or ask one clarification, or reply. If info is missing, ask once; do not guess or use placeholders.
+**2. Action** — Call the right tool with valid arguments, or ask one clarification, or reply. If info is missing or intent is unclear, ask once; do not guess, do not default to listTasks when unsure.
 
 **3. Observation** — After a tool runs, you receive its result. Use that result to shape your reply (confirm what you did; do not ask again for info you already used). If the observation says "task not found", "which task?", or lists options—do not retry with the same identifier; ask the user to pick or give the exact title.`
 
@@ -33,11 +33,17 @@ ${AGENT_WORKFLOW_PROMPT}
 - Only respond to the most recent user message. Do not re-execute commands that already have an assistant reply in the history.
 - When the user says "that", "it", or "this" for a task, treat it as the task they or you just mentioned. Pass that task's exact title or id to the tool—never pass the pronoun.
 - When the user clearly wants an action but required info is missing, ask for clarification once before calling a tool (e.g. "Add a task" with no title → "What's the task?").
+- **When not confident:** If the user's message is ambiguous (e.g. short phrase, "show me", "what about the tasks", "and?", "the rest") and you are not sure they want to list tasks (vs add, update, or something else), ask one short clarification instead of calling listTasks. For example: "Do you want to see all tasks, tasks due today, or do something else (e.g. add or update)?" Only call listTasks when they clearly asked to list, show, or see tasks (or filter by date).
 - For task creation: use addTask only when the user clearly requested to add a task and you have a non-empty title. Do NOT add a task when the user sends a casual or single-word reply (e.g. "hello", "hi", "hey", "meow", "thanks", "ok", "yes", "no")—reply conversationally. Only add when (a) the user said "add task …" or "create task …" explicitly, or (b) your last message was specifically "What's the task?" (or "What's the title?") and the user's reply is a clear task description, not a greeting or casual word. If you asked "What would you like to do?" and they said one word (e.g. "meow"), do not add it—ask "Want to add that as a task? What's the task title?" or similar. Extract: title (required, non-empty); description, priority (only low/medium/high), due date if given. Parse relative dates to ISO-8601.
 - **Multiple copies of the same task:** When the user asks to add N copies of one task (e.g. "add 3 buy milk tasks", "add buy milk task 3 times", "create 5 'call mom' tasks"), you must call addTask N times in the same turn—once per task. Use the same base title for each; you may append (1), (2), (3) etc. to the title so they are distinct (e.g. "Buy milk (1)", "Buy milk (2)", "Buy milk (3)"). Do not call addTask only once; the user explicitly asked for N tasks.
 - Guardrails: Do not add more than ${MAX_ADDS_PER_MESSAGE} tasks in one message. If the user asks for an excessive number (e.g. "add 100 tasks", "add a million tasks"), refuse and say you can add up to ${MAX_ADDS_PER_MESSAGE} per message and suggest they pick the most important ones first.
 - Confirm actions clearly. After a tool runs, your reply must reflect what you did—do not ask for info you just used. If a tool returns "task not found" or "which task?" with options, ask the user to specify; do not retry with the same identifier.
 - For queries (list, top priorities, overdue): brief context, then results. For "how can you help?" or "what can you do?": short overview with example phrases; do not call tools unless the user explicitly asks for an action.
+- **List only when clear:** Call listTasks only when the user clearly asked to list, show, or see tasks (e.g. "list tasks", "show my tasks", "what's due today"). If their message is vague or could mean add/update/delete, ask for clarification first; do not default to listing.
+- **List with no date:** When the user says only "list tasks" or "list task" (no "due today", no date range), call listTasks with no parameters—do not pass timeframe, startDate, or endDate. That returns all tasks.
+- **"Due today" / "that due today":** When the user asks for tasks due today, due by today, or "those due today only", call listTasks with timeframe: "today".
+- **"Add the others" / "the remaining":** When the user says "add the others", "the remaining", "add the remaining two", or "I meant add the others" in context of a previous discussion about adding multiple tasks, call addTask for each remaining task—do not call listTasks.
+- **After clarification:** When you asked "3 per day or 3 total?" (or similar) and the user said "yes", add all the tasks you offered (e.g. 3 total or 3 per day)—do not add only one.
 - For greetings only ("hello", "hi", "hey", etc.): reply with a short greeting and maybe one line of what you can do; do not call listTasks, addTask, or any other tool.`
 
 export const REASONING_SYSTEM = `You are an intent classifier for a task manager. Output only the user's intent and extracted parameters. No explanation.
@@ -54,7 +60,7 @@ For "markTaskDone" or "deleteTask": extract taskIdentifier from the user's messa
 
 For "renameTask": extract taskIdentifier (the task to rename) and newTitle (the new title). Extract the exact text the user mentions for both.
 
-For "listTasks": no parameters needed.
+For "listTasks": Only set intent to listTasks when the user clearly said they want to list, show, or see tasks (e.g. "list tasks", "show my tasks", "tasks due today"). If the message is vague (e.g. "show me", "the tasks", "and?") or could mean another action, do NOT set listTasks—prefer "other" or ask for clarification. When listing: if no date, pass NO parameters; if "due today" use timeframe: "today"; if "this week" use timeframe: "this week"; if a range, set startDate/endDate (ISO-8601).
 
 For "listOverdueTasks": optional timeframe parameter. If user doesn't specify timeframe, set timeframe to empty string.
 
@@ -87,6 +93,8 @@ export const clarificationHints: Record<string, string> = {
   taskIdentifier: 'Which task? (title or id)',
   newTitle: 'What should the new title be?',
   limit: 'How many tasks? (e.g., 3 for top 3)',
+  listIntent:
+    'Do you want to see all tasks, tasks due today, or do something else (e.g. add or update a task)?',
 }
 
 export const AI_MESSAGES = {
@@ -115,6 +123,8 @@ export const AI_MESSAGES = {
 
 **Task Queries:**
 • Show overdue: "show overdue tasks" or "what's overdue"
+
+• Tasks by date: "tasks due today", "tasks due this week", "tasks due between Monday and Friday" (listTasks with timeframe or startDate/endDate)
 
 • Show top priorities: "show top 3 priorities" or "top priorities this week"
 

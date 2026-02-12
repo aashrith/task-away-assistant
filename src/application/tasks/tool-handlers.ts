@@ -4,6 +4,7 @@ import type {
   AddTaskCommand,
   MarkTaskDoneCommand,
   DeleteTaskCommand,
+  ListTasksQuery,
   ListOverdueTasksQuery,
   RenameTaskCommand,
   ListTopPrioritiesQuery,
@@ -130,13 +131,24 @@ export class ToolHandlers {
     return ResponseBuilder.response(TASK_MESSAGES.taskCreated(task.title))
   }
 
-  async handleListTasks(): Promise<Response> {
-    log('executing listTasks')
-    const tasks = await this.taskService.listTasks({})
+  async handleListTasks(args: ListTasksQuery = {}): Promise<Response> {
+    log('executing listTasks', { args })
+    const tasks = await this.taskService.listTasks(args)
     const formatted = this.taskService.formatTasksForChat(tasks)
+    const emptyMessage = this.getListTasksEmptyMessage(args)
     const message =
-      tasks.length === 0 ? TASK_MESSAGES.noTasks : `${TASK_MESSAGES.taskListHeader}\n\n${formatted}`
+      tasks.length === 0 ? emptyMessage : `${TASK_MESSAGES.taskListHeader}\n\n${formatted}`
     return ResponseBuilder.response(message)
+  }
+
+  private getListTasksEmptyMessage(args: ListTasksQuery): string {
+    const start = args.startDate?.trim()
+    const end = args.endDate?.trim()
+    if (start || end) return TASK_MESSAGES.noTasksInDateRange
+    const tf = args.timeframe?.toLowerCase()
+    if (tf === 'today') return TASK_MESSAGES.noTasksDueToday
+    if (tf === 'this week') return TASK_MESSAGES.noTasksDueThisWeek
+    return TASK_MESSAGES.noTasks
   }
 
   async handleMarkTaskDone(args: MarkTaskDoneCommand): Promise<Response> {
